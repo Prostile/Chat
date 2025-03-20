@@ -3,6 +3,7 @@ using Client.models.Decorator.Messages;
 using System.Text.Json.Serialization;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using Client.models.Decortor.Messages.DTO;
 
 public record UserConnection(string UserName, string ChatId);
 
@@ -51,6 +52,11 @@ namespace Client
         {
             var userName = textBoxUserName.Text;
             var message = textBoxMessage.Text;
+
+            IMessage msg = MessageStringsFabric.MessageFromClientToChat(message);
+            msg = (new MessageDTO(msg)).CreateMessage();
+
+            MessageBox.Show(msg.GetMessage);
 
             if (!string.IsNullOrWhiteSpace(userName) && !string.IsNullOrWhiteSpace(message))
             {

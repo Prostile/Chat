@@ -1,5 +1,7 @@
 ﻿namespace Client.models
 {
+    using Client.models.Decorator.Messages;
+    using Client.models.Decortor.Messages.DTO;
     using System;
     using System.Text;
     using System.Text.Json.Serialization;
@@ -9,20 +11,31 @@
         public interface IMessage
         {
             string GetMessage();
+            string Serialize(MessageDTO msg);
+        }
+
+        public interface ISerializable
+        {
         }
 
         public class Message : IMessage
         {
             private readonly string _content;
 
-            public Message(string content)
+            public Message(string content, string additional = null)
             {
                 _content = content;
             }
-
+            
             public string GetMessage()
             {
                 return _content;
+            }
+
+            public void Serialize(MessageDTO dto)
+            {
+                dto.Content = _content;
+                dto.AddType(this);
             }
         }
 
@@ -30,21 +43,27 @@
         {
             protected readonly IMessage _message;
 
-            protected MessageDecorator(IMessage message)
+            protected MessageDecorator(IMessage message, string additional = null)
             {
                 _message = message;
             }
 
             public abstract string GetMessage();
+            public abstract void Serialize();
         }
 
         public class EncryptedMessage : MessageDecorator
         {
-            public EncryptedMessage(IMessage message) : base(message) { }
+            public EncryptedMessage(IMessage message, string additional = null) : base(message) { }
 
             public override string GetMessage()
             {
                 return Encrypt(_message.GetMessage());
+            }
+            public void Serialize(MessageDTO dto)
+            {
+                _message.Serialize(dto);
+                dto.AddType(this);
             }
 
             private string Encrypt(string message)
@@ -54,13 +73,17 @@
         }
         public class DecryptedMessage : MessageDecorator
         {
-            public DecryptedMessage(IMessage message) : base(message) { }
+            public DecryptedMessage(IMessage message, string additional = null) : base(message) { }
 
             public override string GetMessage()
             {
                 return Decrypt(_message.GetMessage());
             }
-
+            public void Serialize(MessageDTO dto)
+            {
+                _message.Serialize(dto);
+                dto.AddType(this);
+            }
             private string Decrypt(string message)
             {
                 return Encoding.UTF8.GetString(Convert.FromBase64String(message));
@@ -68,39 +91,57 @@
         }
         public class TimestampedMessage : MessageDecorator
         {
-            public TimestampedMessage(IMessage message) : base(message) { }
+            public TimestampedMessage(IMessage message, string additional = null) : base(message) { }
 
             public override string GetMessage()
             {
                 return $"{DateTime.Now}: {_message.GetMessage()}";
+
+            }
+            public void Serialize(MessageDTO dto)
+            {
+                _message.Serialize(dto);
+                dto.AddType(this);
             }
         }
         public class PriorityMessage : MessageDecorator
         {
             private readonly string _priority;
 
-            public PriorityMessage(IMessage message, string priority) : base(message)
+            public PriorityMessage(IMessage message, string additional = null) : base(message)
             {
-                _priority = priority;
+                _priority = additional;
             }
 
             public override string GetMessage()
             {
                 return $"[{_priority}] {_message.GetMessage()}";
             }
+            public void Serialize(MessageDTO dto)
+            {
+                dto.Priority = _priority;
+                _message.Serialize(dto);
+                dto.AddType(this);
+            }
         }
         public class WhoseMessage : MessageDecorator
         {
             private readonly string _author;
 
-            public WhoseMessage(IMessage message, string author) : base(message)
+            public WhoseMessage(IMessage message, string additional = null) : base(message)
             {
-                _author = author;
+                _author = additional;
             }
 
             public override string GetMessage()
             {
                 return $"[{_author}] {_message.GetMessage()}";
+            }
+            public void Serialize(MessageDTO dto)
+            {
+                dto.Author = _author;
+                _message.Serialize(dto);
+                dto.AddType(this);
             }
         }
 
@@ -186,6 +227,59 @@
             {
                 return new PriorityMessage(
                              new Message(message), priority);
+            }
+        }
+    }
+
+    namespace Decortor.Messages.DTO
+    {
+        public class MessageDTO
+        {
+            public string Content { get; set; }
+            public string Priority { get; set; }
+            public string Author { get; set; }
+            public List<Type> Decortors { get; set; }
+            public MessageDTO(IMessage msg)
+            {
+                Decorators = new List<Type>();
+                msg.Serialize(this);
+            }
+            public void AddType(object o)
+            {
+                if(o is IMessage)
+                {
+                    Decorators.Add(o.GetType());
+                }
+            }
+            public IMessage CreateMessage()
+            {
+                IMessage msg = new Message(Content); // Создаем базовое сообщение
+
+                foreach (var type in Decorators)
+                {
+                    if (type == typeof(PriorityMessage))
+                    {
+                        msg = new PriorityMessage(msg, Priority);
+                    }
+                    else if (type == typeof(WhoseMessage))
+                    {
+                        msg = new WhoseMessage(msg, Author);
+                    }
+                    else if (type == typeof(EncryptedMessage))
+                    {
+                        msg = new EncryptedMessage(msg);
+                    }
+                    else if (type == typeof(DecryptedMessage))
+                    {
+                        msg = new DecryptedMessage(msg);
+                    }
+                    else if (type == typeof(TimestampedMessage))
+                    {
+                        msg = new TimestampedMessage(msg);
+                    }
+                }
+
+                return msg;
             }
         }
     }
