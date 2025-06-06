@@ -12,7 +12,7 @@ namespace Client
     public partial class ChatForm : Form
     {
         private HubConnection _connection;
-        private string _chatId = "defaultChat"; // Замените на ваш идентификатор чата
+        private string _chatId = "defaultChat"; // идентификатор чата
 
         public ChatForm()
         {
