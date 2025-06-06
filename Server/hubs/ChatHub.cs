@@ -1,7 +1,8 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using System.Text.Json;
-using Server.models.Decorator.Messages;
-using Server.models.Decorator.Log;
+using Message.Decorator.Messages.DTO;
+using Message.Decorator.Messages;
+using Message.Decorator.Log;
 
 namespace Server.hubs;
 
@@ -15,11 +16,13 @@ public interface IChatClient
 public class ChatHub : Hub<IChatClient>
 {
     private readonly CustomMemoryCaches _cache;
-    private readonly Server.models.Decorator.Log.ILogger _logger;
+
+    private readonly Message.Decorator.Log.ILogger _logger;
 
     public ChatHub(CustomMemoryCaches cache)
     {
         _cache = cache;
+
         _logger = new TimestampLogger(
                     new ConsoleLogger());
     }
@@ -33,10 +36,13 @@ public class ChatHub : Hub<IChatClient>
         // Сохраняем данные в кэше
         _cache.Set(Context.ConnectionId, stringConnection, TimeSpan.FromMinutes(30));
 
+        var msg = MessageStringsFabric.MessageFromServerToClient($"{connection.UserName} подключился", "Admin");
+
         await Clients
             .Group(connection.ChatId)
-            .ReceiveMessage(MessageStringsFabric
-                .MessageFromServerToClient($"{connection.UserName} подключился", "Admin"));
+            .ReceiveMessage(msg);
+        _logger.Log($"Sending message: {JsonSerializer.Serialize(msg)}");
+
         _logger.Log($"{connection.UserName} подключился к чату {connection.ChatId}");
     }
 
@@ -49,11 +55,16 @@ public class ChatHub : Hub<IChatClient>
 
             if (connection is not null)
             {
-                _logger.Log($"получено {message} от {connection.UserName}");
+                var msg = MessageStringsFabric.MessageFromServerToClient(
+                            MessageStringsFabric.MessageToDecrypt(message), connection.UserName);
+
+                _logger.Log($"получено {msg} от {connection.UserName}");
+
                 await Clients
                     .Group(connection.ChatId)
-                    .ReceiveMessage(message);
-                _logger.Log($"отправка {message} в чат {connection.ChatId}");
+                    .ReceiveMessage(msg);
+
+                _logger.Log($"отправка {msg} в чат {connection.ChatId}");
             }
         }
     }
@@ -65,17 +76,21 @@ public class ChatHub : Hub<IChatClient>
         {
             var connection = JsonSerializer.Deserialize<UserConnection>(stringConnection.ToString());
 
+            var msg = MessageStringsFabric.MessageFromServerToClient($"{connection.UserName} отключился", "Admin");
+         
             if (connection is not null)
             {
                 // Удаляем данные из кэша
                 _cache.Remove(Context.ConnectionId);
+
                 _logger.Log($"{connection.ChatId} удален из кэша");
+
                 await Groups.RemoveFromGroupAsync(Context.ConnectionId, connection.ChatId);
 
                 await Clients
                     .Group(connection.ChatId)
-                    .ReceiveMessage(MessageStringsFabric
-                        .MessageFromServerToClient($"{connection.UserName} отключился", "Admin"));
+                    .ReceiveMessage(msg);
+
                 _logger.Log($"{connection.UserName} отключился от чата {connection.ChatId}");
             }
         }

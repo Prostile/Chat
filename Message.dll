@@ -1,17 +1,15 @@
-﻿namespace Client.models
+﻿namespace Server.models
 {
-    using Client.models.Decorator.Messages;
-    using Client.models.Decortor.Messages.DTO;
+    using Server.models.Decorator.Messages.DTO;
     using System;
     using System.Text;
-    using System.Text.Json.Serialization;
 
     namespace Decorator.Messages
     {
         public interface IMessage
         {
             string GetMessage();
-            string Serialize(MessageDTO msg);
+            void Serialize(MessageDTOConverter msg);
         }
 
         public interface ISerializable
@@ -26,15 +24,15 @@
             {
                 _content = content;
             }
-            
+
             public string GetMessage()
             {
                 return _content;
             }
 
-            public void Serialize(MessageDTO dto)
+            public void Serialize(MessageDTOConverter dto)
             {
-                dto.Content = _content;
+                dto.DTO.Content = _content;
                 dto.AddType(this);
             }
         }
@@ -49,7 +47,7 @@
             }
 
             public abstract string GetMessage();
-            public abstract void Serialize();
+            public abstract void Serialize(MessageDTOConverter dto);
         }
 
         public class EncryptedMessage : MessageDecorator
@@ -60,7 +58,7 @@
             {
                 return Encrypt(_message.GetMessage());
             }
-            public void Serialize(MessageDTO dto)
+            public override void Serialize(MessageDTOConverter dto)
             {
                 _message.Serialize(dto);
                 dto.AddType(this);
@@ -79,7 +77,7 @@
             {
                 return Decrypt(_message.GetMessage());
             }
-            public void Serialize(MessageDTO dto)
+            public override void Serialize(MessageDTOConverter dto)
             {
                 _message.Serialize(dto);
                 dto.AddType(this);
@@ -98,7 +96,7 @@
                 return $"{DateTime.Now}: {_message.GetMessage()}";
 
             }
-            public void Serialize(MessageDTO dto)
+            public override void Serialize(MessageDTOConverter dto)
             {
                 _message.Serialize(dto);
                 dto.AddType(this);
@@ -117,9 +115,9 @@
             {
                 return $"[{_priority}] {_message.GetMessage()}";
             }
-            public void Serialize(MessageDTO dto)
+            public override void Serialize(MessageDTOConverter dto)
             {
-                dto.Priority = _priority;
+                dto.DTO.Priority = _priority;
                 _message.Serialize(dto);
                 dto.AddType(this);
             }
@@ -137,9 +135,9 @@
             {
                 return $"[{_author}] {_message.GetMessage()}";
             }
-            public void Serialize(MessageDTO dto)
+            public override void Serialize(MessageDTOConverter dto)
             {
-                dto.Author = _author;
+                dto.DTO.Author = _author;
                 _message.Serialize(dto);
                 dto.AddType(this);
             }
@@ -231,39 +229,47 @@
         }
     }
 
-    namespace Decortor.Messages.DTO
+    namespace Decorator.Messages.DTO
     {
         public class MessageDTO
         {
             public string Content { get; set; }
             public string Priority { get; set; }
             public string Author { get; set; }
-            public List<Type> Decortors { get; set; }
-            public MessageDTO(IMessage msg)
+            public List<Type> Decorators { get; set; } = new List<Type>();
+        }
+
+        public class MessageDTOConverter
+        {
+            public MessageDTO DTO { get; set; }
+            public MessageDTOConverter(IMessage msg)
             {
-                Decorators = new List<Type>();
                 msg.Serialize(this);
+            }
+            public MessageDTOConverter(MessageDTO dto)
+            {
+                DTO = dto;
             }
             public void AddType(object o)
             {
-                if(o is IMessage)
+                if (o is IMessage)
                 {
-                    Decorators.Add(o.GetType());
+                    DTO.Decorators.Add(o.GetType());
                 }
             }
             public IMessage CreateMessage()
             {
-                IMessage msg = new Message(Content); // Создаем базовое сообщение
+                IMessage msg = new Message(DTO.Content); // Создаем базовое сообщение
 
-                foreach (var type in Decorators)
+                foreach (var type in DTO.Decorators)
                 {
                     if (type == typeof(PriorityMessage))
                     {
-                        msg = new PriorityMessage(msg, Priority);
+                        msg = new PriorityMessage(msg, DTO.Priority);
                     }
                     else if (type == typeof(WhoseMessage))
                     {
-                        msg = new WhoseMessage(msg, Author);
+                        msg = new WhoseMessage(msg, DTO.Author);
                     }
                     else if (type == typeof(EncryptedMessage))
                     {

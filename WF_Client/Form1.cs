@@ -1,9 +1,9 @@
 ﻿using Microsoft.AspNetCore.SignalR.Client;
-using Client.models.Decorator.Messages;
 using System.Text.Json.Serialization;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
-using Client.models.Decortor.Messages.DTO;
+using Message.Decorator.Messages.DTO;
+using Message.Decorator.Messages;
 
 public record UserConnection(string UserName, string ChatId);
 
@@ -12,7 +12,7 @@ namespace Client
     public partial class ChatForm : Form
     {
         private HubConnection _connection;
-        private string _chatId = "defaultChat"; // Замените на ваш идентификатор чата
+        private string _chatId = "defaultChat"; // идентификатор чата
 
         public ChatForm()
         {
@@ -37,13 +37,14 @@ namespace Client
                 })
                 .Build();
 
-            _connection.On<string>("ReceiveMessage", (message) =>
-            {
-                Invoke(new Action(() =>
+            _connection.On<string>("ReceiveMessage", message =>
                 {
-                    listBoxMessages.Items.Add(message);
-                }));
-            });
+                    Invoke(new Action(() =>
+                    {
+                        var msg = message;
+                        listBoxMessages.Items.Add(msg);
+                    }));
+                });
 
             await _connection.StartAsync();
         }
@@ -53,16 +54,19 @@ namespace Client
             var userName = textBoxUserName.Text;
             var message = textBoxMessage.Text;
 
-            IMessage msg = MessageStringsFabric.MessageFromClientToChat(message);
-            msg = (new MessageDTO(msg)).CreateMessage();
-
-            MessageBox.Show(msg.GetMessage);
-
+            string msg = MessageStringsFabric.MessageToEncrypt(message);
+            MessageBox.Show(msg);
             if (!string.IsNullOrWhiteSpace(userName) && !string.IsNullOrWhiteSpace(message))
             {
-                await _connection.InvokeAsync("SendMessage", MessageStringsFabric
-                                    .MessageFromClientToChat(message));
-                textBoxMessage.Clear();
+                try
+                {
+                    await _connection.InvokeAsync("SendMessage", msg);
+                    textBoxMessage.Clear();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"{ex.Message}");
+                }
             }
         }
 
@@ -80,7 +84,14 @@ namespace Client
                 buttonSend.Enabled = true;
                 buttonAccept.Enabled = false;
                 var connection = new UserConnection(userName, _chatId);
-                await _connection.InvokeAsync("JoinChat", connection);
+                try
+                {
+                    await _connection.InvokeAsync("JoinChat", connection);
+                }
+                catch(Exception ex)
+                {
+                    MessageBox.Show($"{ex.Message}");
+                }
             }
             else
             {
