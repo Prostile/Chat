@@ -12,4 +12,12 @@
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="9.0.3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="models\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Message\Message.csproj" />
+  </ItemGroup>
+
 </Project>
